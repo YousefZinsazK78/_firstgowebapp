@@ -1,16 +1,79 @@
 package main
 
 import (
-	"fmt"
+	"errors"
+	"html/template"
+	"log"
+	"net/http"
+	"regexp"
 
 	"github.com/yousefzinsazk78/firstgowebapp/page"
 )
 
+var templates = template.Must(template.ParseFiles("edit.html", "view.html"))
+
+var validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9]+)$")
+
+func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		m := validPath.FindStringSubmatch(r.URL.Path)
+		if m == nil {
+			http.NotFound(w, r)
+			return
+		}
+		fn(w, r, m[2])
+	}
+}
+
+func getTitle(w http.ResponseWriter, r *http.Request) (string, error) {
+	m := validPath.FindStringSubmatch(r.URL.Path)
+	if m == nil {
+		http.NotFound(w, r)
+		return "", errors.New("invalid page title")
+	}
+	return m[2], nil
+}
+
+func renderTemplate(w http.ResponseWriter, tmpl string, p *page.Page) {
+	err := templates.ExecuteTemplate(w, tmpl+".html", p)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
+	p, err := page.LoadPage(title)
+	if err != nil {
+		http.Redirect(w, r, "/edit/"+title, http.StatusFound)
+		return
+	}
+	renderTemplate(w, "view", p)
+}
+
+func editHandler(w http.ResponseWriter, r *http.Request, title string) {
+	p, err := page.LoadPage(title)
+	if err != nil {
+		p = &page.Page{Title: title}
+	}
+	renderTemplate(w, "edit", p)
+}
+
+func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
+	body := r.FormValue("body")
+	p := &page.Page{Title: title, Body: []byte(body)}
+	err := p.Save()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/view/"+title, http.StatusFound)
+}
+
 func main() {
+	// http.HandleFunc("/", indexHandler)
+	http.HandleFunc("/view/", makeHandler(viewHandler))
+	http.HandleFunc("/edit/", makeHandler(editHandler))
+	http.HandleFunc("/save/", makeHandler(saveHandler))
 
-	p1 := &page.Page{Title: "first title", Body: []byte("yousef is here....")}
-	p1.Save()
-	p2, _ := page.LoadPage("first title")
-	fmt.Println(string(p2.Body))
-
+	log.Fatal(http.ListenAndServe(":5000", nil))
 }
