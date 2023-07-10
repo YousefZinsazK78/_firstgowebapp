@@ -7,13 +7,16 @@ type Page struct {
 	Body  []byte
 }
 
-func (p *Page) save() error {
+func (p *Page) Save() error {
 	filename := p.Title + ".txt"
 	return os.WriteFile(filename, p.Body, 0600)
 }
 
-func loadPage(title string) *Page {
+func LoadPage(title string) (*Page, error) {
 	filename := title + ".txt"
-	body, _ := os.ReadFile(filename)
-	return &Page{Title: title, Body: body}
+	body, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	return &Page{Title: title, Body: body}, nil
 }
